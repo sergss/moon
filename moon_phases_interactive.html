@@ -1,281 +1,588 @@
-
 <style>
-#app{padding:8px 0}
-.info{text-align:center;margin:6px 0 0}
-.pn{font-size:15px;font-weight:500;color:var(--color-text-primary)}
-.pe{font-size:13px;color:var(--color-text-secondary);margin-top:3px}
-.ctrls{display:flex;align-items:center;gap:10px;margin-top:10px}
-.ctrls label{font-size:13px;color:var(--color-text-secondary);white-space:nowrap}
-#pb{font-size:13px;padding:5px 12px;cursor:pointer;border-radius:var(--border-radius-md);background:transparent;border:0.5px solid var(--color-border-secondary);color:var(--color-text-primary)}
-#pb:hover{background:var(--color-background-secondary)}
-#ao{font-size:13px;font-weight:500;min-width:34px;text-align:right;color:var(--color-text-secondary)}
+#app{
+  max-width:1200px;
+  margin:0 auto;
+  padding:14px 12px 22px;
+  font-family:var(--font-sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+}
+#mc{
+  width:100%;
+  display:block;
+  aspect-ratio:960/420;
+  border-radius:18px;
+}
+.info{
+  max-width:56rem;
+  margin:14px auto 0;
+  text-align:center;
+}
+.pn{
+  font-size:clamp(18px,2.2vw,26px);
+  font-weight:600;
+  color:var(--color-text-primary, #111827);
+}
+.pe{
+  margin-top:6px;
+  font-size:clamp(14px,1.5vw,17px);
+  line-height:1.45;
+  color:var(--color-text-secondary, #4b5563);
+}
+.ctrls{
+  display:grid;
+  grid-template-columns:auto auto minmax(0,1fr) auto;
+  gap:12px;
+  align-items:center;
+  margin-top:16px;
+}
+.ctrls label{
+  font-size:14px;
+  color:var(--color-text-secondary, #4b5563);
+  white-space:nowrap;
+}
+#pb{
+  font-size:14px;
+  line-height:1.2;
+  padding:10px 16px;
+  cursor:pointer;
+  border-radius:12px;
+  background:var(--color-background-primary, rgba(255,255,255,0.86));
+  border:1px solid var(--color-border-secondary, rgba(148,163,184,0.45));
+  color:var(--color-text-primary, #111827);
+}
+#pb:hover{
+  background:var(--color-background-secondary, rgba(248,250,252,0.94));
+}
+#as{
+  width:100%;
+  min-width:0;
+}
+#ao{
+  min-width:44px;
+  text-align:right;
+  font-size:14px;
+  font-weight:600;
+  color:var(--color-text-secondary, #4b5563);
+}
+@media (max-width: 640px){
+  #app{
+    padding:10px 10px 18px;
+  }
+  .info{
+    margin-top:12px;
+  }
+  .ctrls{
+    grid-template-columns:1fr auto;
+    gap:10px 12px;
+  }
+  #pb{
+    grid-column:1 / -1;
+    width:100%;
+  }
+  .ctrls label{
+    grid-column:1 / 2;
+  }
+  #as{
+    grid-column:1 / -1;
+  }
+}
 </style>
 <div id="app">
-  <canvas id="mc" style="width:100%;display:block;aspect-ratio:640/285"></canvas>
+  <canvas id="mc"></canvas>
   <div class="info">
     <div class="pn" id="pn">Полнолуние</div>
-    <div class="pe" id="pe">Луна напротив Солнца — к нам обращена вся освещённая сторона</div>
+    <div class="pe" id="pe">Луна напротив Солнца - к нам обращена вся освещенная сторона</div>
   </div>
   <div class="ctrls">
     <button id="pb">⏸ Пауза</button>
-    <label>Угол орбиты</label>
-    <input type="range" min="0" max="359" value="0" id="as" style="flex:1">
+    <label for="as">Угол орбиты</label>
+    <input type="range" min="0" max="359" value="0" id="as">
     <span id="ao">0°</span>
   </div>
 </div>
 <script>
-const cv=document.getElementById('mc'),g=cv.getContext('2d');
-const sl=document.getElementById('as'),ao=document.getElementById('ao');
-const pn=document.getElementById('pn'),pe=document.getElementById('pe'),pb=document.getElementById('pb');
-const DW=640,DH=285,dpr=window.devicePixelRatio||1;
-cv.width=DW*dpr; cv.height=DH*dpr; g.scale(dpr,dpr);
+const cv = document.getElementById('mc');
+const g = cv.getContext('2d');
+const sl = document.getElementById('as');
+const ao = document.getElementById('ao');
+const pn = document.getElementById('pn');
+const pe = document.getElementById('pe');
+const pb = document.getElementById('pb');
+const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-// Layout constants
-const EX=305,EY=142,OR=104,ER=19,MR=11,SX=43,SY=142,SR=24;
-const dk=matchMedia('(prefers-color-scheme: dark)').matches;
-const LM=dk?'#dddbc4':'#f4f2e2'; // lit moon
-const DM=dk?'#3a3835':'#9a9890'; // dark moon
-const SC=dk?'#F6AD55':'#F9C74F'; // sun
-const OC=dk?'#FBBF24':'#D97706'; // observer / accent
-const TS=dk?'rgba(200,198,188,0.65)':'rgba(60,58,53,0.6)'; // secondary text
-
-const PHASES=[
-  {mid:0,  n:'Полнолуние',        e:'Луна напротив Солнца — к нам обращена вся освещённая сторона'},
-  {mid:45, n:'Убывающая луна',    e:'Луна смещается к Солнцу — освещённая доля уменьшается'},
-  {mid:90, n:'Последняя четверть',e:'Угол 90° — видим ровно половину освещённой стороны'},
-  {mid:135,n:'Убывающий серп',    e:'Луна у Солнца — от освещённой стороны виден тонкий серп'},
-  {mid:180,n:'Новолуние',         e:'Луна рядом с Солнцем — к нам обращена тёмная сторона'},
-  {mid:225,n:'Растущий серп',     e:'Луна удаляется от Солнца — появляется тонкий серп'},
-  {mid:270,n:'Первая четверть',   e:'Снова угол 90° — видим половину с другой стороны'},
-  {mid:315,n:'Растущая луна',     e:'Луна движется к противостоянию — освещённая доля растёт'},
+const PHASES = [
+  { mid: 0, name: 'Полнолуние', description: 'Луна напротив Солнца - к нам обращена вся освещенная сторона' },
+  { mid: 45, name: 'Убывающая луна', description: 'Луна смещается к Солнцу - освещенная доля постепенно уменьшается' },
+  { mid: 90, name: 'Последняя четверть', description: 'Угол 90° - видим ровно половину освещенной стороны' },
+  { mid: 135, name: 'Убывающий серп', description: 'Луна почти рядом с Солнцем - остается тонкий освещенный серп' },
+  { mid: 180, name: 'Новолуние', description: 'Луна рядом с Солнцем - к нам обращена темная сторона' },
+  { mid: 225, name: 'Растущий серп', description: 'Луна начинает удаляться от Солнца - появляется тонкий серп' },
+  { mid: 270, name: 'Первая четверть', description: 'Снова угол 90° - видим половину, но уже с другой стороны' },
+  { mid: 315, name: 'Растущая луна', description: 'Луна движется к противостоянию - освещенная доля растет' }
 ];
 
-function getPhase(a){
-  const n=((a%360)+360)%360;
-  let best=PHASES[0],bD=999;
-  PHASES.forEach(p=>{let d=Math.abs(n-p.mid);if(d>180)d=360-d;if(d<bD){bD=d;best=p;}});
+let isDark = colorSchemeQuery.matches;
+let ang = 0;
+let playing = true;
+let layout = getLayout();
+let pixelRatio = window.devicePixelRatio || 1;
+let rafId;
+
+function getPalette() {
+  if (isDark) {
+    return {
+      litMoon: '#e8e4d4',
+      darkMoon: '#4e4a44',
+      sun: '#f7b955',
+      accent: '#f59e0b',
+      text: 'rgba(236,233,225,0.78)',
+      orbit: 'rgba(255,255,255,0.14)',
+      earth: '#3b82f6',
+      land: '#3f9d4d',
+      previewFill: 'rgba(33,31,29,0.72)',
+      previewStroke: 'rgba(255,255,255,0.12)',
+      ring: 'rgba(255,255,255,0.1)',
+      line: 'rgba(245,158,11,0.26)',
+      lightStart: 'rgba(247,185,85,0.16)',
+      lightEnd: 'rgba(247,185,85,0.02)',
+      backgroundTop: '#141414',
+      backgroundBottom: '#1d1d1d'
+    };
+  }
+
+  return {
+    litMoon: '#f3efdd',
+    darkMoon: '#9c978d',
+    sun: '#f9c74f',
+    accent: '#d97706',
+    text: 'rgba(82,77,69,0.72)',
+    orbit: 'rgba(15,23,42,0.12)',
+    earth: '#4a90d9',
+    land: '#5aa25e',
+    previewFill: 'rgba(255,251,244,0.92)',
+    previewStroke: 'rgba(15,23,42,0.11)',
+    ring: 'rgba(15,23,42,0.1)',
+    line: 'rgba(217,119,6,0.22)',
+    lightStart: 'rgba(249,199,79,0.22)',
+    lightEnd: 'rgba(249,199,79,0.03)',
+    backgroundTop: '#ffffff',
+    backgroundBottom: '#f8f5ee'
+  };
+}
+
+function getLayout() {
+  const containerWidth = cv.parentElement ? cv.parentElement.clientWidth : window.innerWidth;
+  const mobile = containerWidth <= 640;
+
+  if (mobile) {
+    return {
+      width: 390,
+      height: 470,
+      sun: { x: 58, y: 204, radius: 28 },
+      earth: { x: 214, y: 210, radius: 23 },
+      orbitRadius: 110,
+      moonRadius: 14,
+      preview: { x: 286, y: 16, width: 88, height: 80, radius: 22 },
+      lightBandHeight: 148,
+      lightLabel: { x: 112, y: 92 },
+      legend: { x: 16, y: 444 },
+      fonts: {
+        sceneLabel: 14,
+        previewLabel: 12,
+        helperLabel: 12,
+        observer: 12
+      }
+    };
+  }
+
+  return {
+    width: 960,
+    height: 420,
+    sun: { x: 92, y: 208, radius: 36 },
+    earth: { x: 468, y: 208, radius: 26 },
+    orbitRadius: 152,
+    moonRadius: 16,
+    preview: { x: 822, y: 18, width: 118, height: 96, radius: 24 },
+    lightBandHeight: 144,
+    lightLabel: { x: 166, y: 92 },
+    legend: { x: 18, y: 392 },
+    fonts: {
+      sceneLabel: 16,
+      previewLabel: 13,
+      helperLabel: 13,
+      observer: 13
+    }
+  };
+}
+
+function getPhase(angle) {
+  const normalized = ((angle % 360) + 360) % 360;
+  let best = PHASES[0];
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const phase of PHASES) {
+    let distance = Math.abs(normalized - phase.mid);
+    if (distance > 180) {
+      distance = 360 - distance;
+    }
+    if (distance < bestDistance) {
+      best = phase;
+      bestDistance = distance;
+    }
+  }
+
   return best;
 }
 
-// Moon phase as seen from Earth.
-// theta = orbit angle in radians.
-// 0 = full (moon on RIGHT, opposite sun on LEFT)
-// PI = new (moon on LEFT, near sun)
-// Lit side always faces LEFT (toward sun).
-function drawPhase(mx,my,r,theta){
+function getMoonPosition(angle) {
+  const radians = angle * Math.PI / 180;
+  return {
+    x: layout.earth.x + Math.cos(radians) * layout.orbitRadius,
+    y: layout.earth.y + Math.sin(radians) * layout.orbitRadius
+  };
+}
+
+function clearCanvas() {
   g.save();
-  g.beginPath(); g.arc(mx,my,r,0,Math.PI*2); g.clip();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, cv.width, cv.height);
+  g.restore();
+}
 
-  // Left half = lit
-  g.fillStyle=LM;
-  g.beginPath(); g.arc(mx,my,r,-Math.PI/2,Math.PI/2,true); g.lineTo(mx,my-r); g.fill();
-  // Right half = dark
-  g.fillStyle=DM;
-  g.beginPath(); g.arc(mx,my,r,-Math.PI/2,Math.PI/2,false); g.lineTo(mx,my-r); g.fill();
+function drawSceneBackground(palette) {
+  const gradient = g.createLinearGradient(0, 0, 0, layout.height);
+  gradient.addColorStop(0, palette.backgroundTop);
+  gradient.addColorStop(1, palette.backgroundBottom);
+  g.fillStyle = gradient;
+  g.fillRect(0, 0, layout.width, layout.height);
+}
 
-  // Terminator: cos(theta) goes from +1 (full) to 0 (quarter) to -1 (new)
-  const ct=Math.cos(theta), tr=Math.abs(ct)*r;
-  if(tr>0.5){
-    if(ct>0){
-      // Gibbous: terminator on the RIGHT side — expand lit into right half
-      g.fillStyle=LM;
-      g.beginPath(); g.ellipse(mx,my,tr,r,0,-Math.PI/2,Math.PI/2,false); g.lineTo(mx,my-r); g.fill();
+function drawLightZone(palette) {
+  const gradient = g.createLinearGradient(layout.sun.x + layout.sun.radius, 0, layout.width, 0);
+  gradient.addColorStop(0, palette.lightStart);
+  gradient.addColorStop(1, palette.lightEnd);
+  g.fillStyle = gradient;
+  g.fillRect(
+    layout.sun.x + layout.sun.radius,
+    layout.earth.y - layout.lightBandHeight / 2,
+    layout.width - layout.sun.x - layout.sun.radius,
+    layout.lightBandHeight
+  );
+}
+
+function drawSun(palette) {
+  const { x, y, radius } = layout.sun;
+  g.save();
+  for (let index = 0; index < 8; index += 1) {
+    const radians = index / 8 * Math.PI * 2;
+    g.beginPath();
+    g.moveTo(x + Math.cos(radians) * (radius + 8), y + Math.sin(radians) * (radius + 8));
+    g.lineTo(x + Math.cos(radians) * (radius + 20), y + Math.sin(radians) * (radius + 20));
+    g.strokeStyle = palette.sun;
+    g.lineWidth = 2.5;
+    g.stroke();
+  }
+
+  g.beginPath();
+  g.arc(x, y, radius, 0, Math.PI * 2);
+  g.fillStyle = palette.sun;
+  g.fill();
+
+  g.fillStyle = palette.text;
+  g.font = `600 ${layout.fonts.sceneLabel}px sans-serif`;
+  g.textAlign = 'center';
+  g.fillText('Солнце', x, y + radius + 26);
+  g.restore();
+}
+
+function drawOrbit(palette) {
+  g.save();
+  g.beginPath();
+  g.arc(layout.earth.x, layout.earth.y, layout.orbitRadius, 0, Math.PI * 2);
+  g.setLineDash([5, 8]);
+  g.strokeStyle = palette.orbit;
+  g.lineWidth = 1.4;
+  g.stroke();
+  g.setLineDash([]);
+  g.restore();
+}
+
+function drawEarth(palette) {
+  const { x, y, radius } = layout.earth;
+  g.save();
+  g.beginPath();
+  g.arc(x, y, radius, 0, Math.PI * 2);
+  g.fillStyle = palette.earth;
+  g.fill();
+
+  g.fillStyle = palette.land;
+  g.beginPath();
+  g.ellipse(x - radius * 0.2, y - radius * 0.28, radius * 0.36, radius * 0.22, -0.35, 0, Math.PI * 2);
+  g.fill();
+  g.beginPath();
+  g.ellipse(x + radius * 0.28, y + radius * 0.2, radius * 0.28, radius * 0.18, 0.4, 0, Math.PI * 2);
+  g.fill();
+
+  g.fillStyle = palette.text;
+  g.font = `600 ${layout.fonts.sceneLabel}px sans-serif`;
+  g.textAlign = 'center';
+  g.fillText('Земля', x, y + radius + 28);
+  g.restore();
+}
+
+function drawPhase(mx, my, radius, theta, palette) {
+  g.save();
+  g.beginPath();
+  g.arc(mx, my, radius, 0, Math.PI * 2);
+  g.clip();
+
+  g.fillStyle = palette.litMoon;
+  g.beginPath();
+  g.arc(mx, my, radius, -Math.PI / 2, Math.PI / 2, true);
+  g.lineTo(mx, my - radius);
+  g.fill();
+
+  g.fillStyle = palette.darkMoon;
+  g.beginPath();
+  g.arc(mx, my, radius, -Math.PI / 2, Math.PI / 2, false);
+  g.lineTo(mx, my - radius);
+  g.fill();
+
+  const cosine = Math.cos(theta);
+  const terminatorRadius = Math.abs(cosine) * radius;
+  if (terminatorRadius > 0.5) {
+    if (cosine > 0) {
+      g.fillStyle = palette.litMoon;
+      g.beginPath();
+      g.ellipse(mx, my, terminatorRadius, radius, 0, -Math.PI / 2, Math.PI / 2, false);
+      g.lineTo(mx, my - radius);
+      g.fill();
     } else {
-      // Crescent: terminator on the LEFT side — shrink lit by covering with dark
-      g.fillStyle=DM;
-      g.beginPath(); g.ellipse(mx,my,tr,r,0,-Math.PI/2,Math.PI/2,true); g.lineTo(mx,my-r); g.fill();
+      g.fillStyle = palette.darkMoon;
+      g.beginPath();
+      g.ellipse(mx, my, terminatorRadius, radius, 0, -Math.PI / 2, Math.PI / 2, true);
+      g.lineTo(mx, my - radius);
+      g.fill();
     }
   }
+
   g.restore();
 }
 
-function mpos(a){const r=a*Math.PI/180;return{x:EX+Math.cos(r)*OR,y:EY+Math.sin(r)*OR};}
+function drawMoon(mx, my, theta, palette) {
+  drawPhase(mx, my, layout.moonRadius, theta, palette);
 
-function drawSun(){
-  g.save();
-  for(let i=0;i<8;i++){
-    const a=(i/8)*Math.PI*2;
-    g.beginPath();
-    g.moveTo(SX+Math.cos(a)*(SR+4),SY+Math.sin(a)*(SR+4));
-    g.lineTo(SX+Math.cos(a)*(SR+13),SY+Math.sin(a)*(SR+13));
-    g.strokeStyle=SC; g.lineWidth=1.5; g.stroke();
-  }
-  g.beginPath(); g.arc(SX,SY,SR,0,Math.PI*2); g.fillStyle=SC; g.fill();
-  g.fillStyle=TS; g.font='500 11px sans-serif'; g.textAlign='center';
-  g.fillText('Солнце',SX,SY+SR+13);
-  g.restore();
-}
-
-function drawLightZone(){
-  g.save();
-  g.globalAlpha=dk?0.05:0.08;
-  g.fillStyle=SC;
-  g.fillRect(SX+SR,SY-55,DW-SX-SR,110);
-  g.restore();
-}
-
-function drawOrbit(){
-  g.save();
-  g.beginPath(); g.arc(EX,EY,OR,0,Math.PI*2);
-  g.setLineDash([3,5]); g.strokeStyle=dk?'rgba(255,255,255,0.13)':'rgba(0,0,0,0.11)';
-  g.lineWidth=0.8; g.stroke(); g.setLineDash([]);
-  g.restore();
-}
-
-function drawEarth(){
-  g.save();
-  g.beginPath(); g.arc(EX,EY,ER,0,Math.PI*2);
-  g.fillStyle=dk?'#2B6CB0':'#4A90D9'; g.fill();
-  g.fillStyle=dk?'#276B2D':'#4E9B52';
-  g.beginPath(); g.ellipse(EX-4,EY-5,6,3.5,-0.3,0,Math.PI*2); g.fill();
-  g.beginPath(); g.ellipse(EX+5,EY+3,4.5,2.5,0.4,0,Math.PI*2); g.fill();
-  g.fillStyle=TS; g.font='500 11px sans-serif'; g.textAlign='center';
-  g.fillText('Земля',EX,EY+ER+13);
-  g.restore();
-}
-
-function drawObserver(mx,my){
-  const dx=mx-EX,dy=my-EY,dist=Math.sqrt(dx*dx+dy*dy);
-  const nx=dx/dist,ny=dy/dist;
-  const px=-ny*4,py=nx*4; // perpendicular for arrow base width
-
-  // Dashed line of sight
   g.save();
   g.beginPath();
-  g.moveTo(EX+nx*(ER+8),EY+ny*(ER+8));
-  g.lineTo(mx-nx*(MR+3),my-ny*(MR+3));
-  g.setLineDash([4,4]);
-  g.strokeStyle=dk?'rgba(251,191,36,0.22)':'rgba(217,119,6,0.18)';
-  g.lineWidth=0.8; g.stroke(); g.setLineDash([]);
+  g.arc(mx, my, layout.moonRadius, 0, Math.PI * 2);
+  g.strokeStyle = palette.ring;
+  g.lineWidth = 1;
+  g.stroke();
 
-  // Arrow (small triangle on Earth surface pointing at moon)
-  const ox=EX+nx*ER,oy=EY+ny*ER;
-  const tipX=ox+nx*8,tipY=oy+ny*8;
+  g.fillStyle = palette.text;
+  g.font = `600 ${layout.fonts.sceneLabel}px sans-serif`;
+  g.textAlign = 'center';
+  const labelY = my < layout.earth.y ? my - layout.moonRadius - 12 : my + layout.moonRadius + 28;
+  g.fillText('Луна', mx, labelY);
+  g.restore();
+}
+
+function drawObserver(mx, my, palette) {
+  const dx = mx - layout.earth.x;
+  const dy = my - layout.earth.y;
+  const distance = Math.hypot(dx, dy);
+  const nx = dx / distance;
+  const ny = dy / distance;
+  const px = -ny * 5;
+  const py = nx * 5;
+
+  g.save();
   g.beginPath();
-  g.moveTo(tipX,tipY);
-  g.lineTo(ox+px,oy+py);
-  g.lineTo(ox-px,oy-py);
+  g.moveTo(layout.earth.x + nx * (layout.earth.radius + 8), layout.earth.y + ny * (layout.earth.radius + 8));
+  g.lineTo(mx - nx * (layout.moonRadius + 4), my - ny * (layout.moonRadius + 4));
+  g.setLineDash([5, 6]);
+  g.strokeStyle = palette.line;
+  g.lineWidth = 1.1;
+  g.stroke();
+  g.setLineDash([]);
+
+  const ox = layout.earth.x + nx * layout.earth.radius;
+  const oy = layout.earth.y + ny * layout.earth.radius;
+  const tipX = ox + nx * 11;
+  const tipY = oy + ny * 11;
+  g.beginPath();
+  g.moveTo(tipX, tipY);
+  g.lineTo(ox + px, oy + py);
+  g.lineTo(ox - px, oy - py);
   g.closePath();
-  g.fillStyle=OC; g.fill();
+  g.fillStyle = palette.accent;
+  g.fill();
 
-  // "мы" label — placed outside Earth, offset perpendicular so it doesn't sit on the LOS line
-  // Use the perpendicular offset direction that points more "up" on screen
-  const perp = ny < 0 ? {x: -ny, y: nx} : {x: ny, y: -nx}; // pick the upward perp
-  const lx=EX+nx*34+perp.x*11;
-  const ly=EY+ny*34+perp.y*11;
-  g.font='500 10px sans-serif'; g.textAlign='center'; g.textBaseline='middle';
-  g.fillStyle=OC; g.fillText('мы',lx,ly);
-  g.textBaseline='alphabetic';
+  const upwardPerpendicular = ny < 0 ? { x: -ny, y: nx } : { x: ny, y: -nx };
+  const labelX = layout.earth.x + nx * 36 + upwardPerpendicular.x * 12;
+  const labelY = layout.earth.y + ny * 36 + upwardPerpendicular.y * 12;
+  g.fillStyle = palette.accent;
+  g.font = `700 ${layout.fonts.observer}px sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('мы', labelX, labelY);
+  g.textBaseline = 'alphabetic';
   g.restore();
 }
 
-function drawMoonOnOrbit(mx,my){
-  // Top-down view: lit side ALWAYS faces the sun = faces LEFT
-  g.save();
-  g.beginPath(); g.arc(mx,my,MR,0,Math.PI*2); g.clip();
-  g.fillStyle=DM; g.beginPath(); g.arc(mx,my,MR,0,Math.PI*2); g.fill();
-  g.fillStyle=LM;
-  g.beginPath(); g.arc(mx,my,MR,-Math.PI/2,Math.PI/2,true); g.lineTo(mx,my-MR); g.fill();
-  g.restore();
-  // "Луна" label
-  g.save();
-  g.fillStyle=TS; g.font='500 11px sans-serif'; g.textAlign='center';
-  const ly=my<EY?my-MR-7:my+MR+13;
-  g.fillText('Луна',mx,ly);
-  g.restore();
+function drawRoundedRect(x, y, width, height, radius) {
+  if (typeof g.roundRect === 'function') {
+    g.roundRect(x, y, width, height, radius);
+    return;
+  }
+
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  g.moveTo(x + safeRadius, y);
+  g.lineTo(x + width - safeRadius, y);
+  g.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  g.lineTo(x + width, y + height - safeRadius);
+  g.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  g.lineTo(x + safeRadius, y + height);
+  g.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  g.lineTo(x, y + safeRadius);
+  g.quadraticCurveTo(x, y, x + safeRadius, y);
 }
 
-function drawPreview(theta){
-  const bx=DW-88,by=8,bw=80,bh=72,pcx=bx+bw/2,pcy=by+40,pr=20;
+function drawPreview(theta, palette) {
+  const { x, y, width, height, radius } = layout.preview;
+  const centerX = x + width / 2;
+  const centerY = y + 46;
+
   g.save();
-  // box
-  g.fillStyle=dk?'rgba(35,33,30,0.75)':'rgba(252,250,246,0.88)';
-  g.strokeStyle=dk?'rgba(255,255,255,0.1)':'rgba(0,0,0,0.1)';
-  g.lineWidth=0.5;
+  g.fillStyle = palette.previewFill;
+  g.strokeStyle = palette.previewStroke;
+  g.lineWidth = 1;
   g.beginPath();
-  g.roundRect(bx,by,bw,bh,6);
-  g.fill(); g.stroke();
-  // label
-  g.fillStyle=TS; g.font='10px sans-serif'; g.textAlign='center';
-  g.fillText('мы видим:',pcx,by+13);
-  // phase preview
-  drawPhase(pcx,pcy,pr,theta);
-  // thin ring around preview moon
-  g.beginPath(); g.arc(pcx,pcy,pr,0,Math.PI*2);
-  g.strokeStyle=dk?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.1)'; g.lineWidth=0.5; g.stroke();
-  g.restore();
-}
+  drawRoundedRect(x, y, width, height, 16);
+  g.fill();
+  g.stroke();
 
-function drawAngleArc(theta_deg){
-  // Small arc showing angle at earth between Sun-direction and Moon
-  const sunAngle=Math.PI; // sun is at angle=PI from Earth's perspective (to the left)
-  const moonAngle=(theta_deg*Math.PI/180); // orbit angle of moon
-  g.save();
+  g.fillStyle = palette.text;
+  g.font = `600 ${layout.fonts.previewLabel}px sans-serif`;
+  g.textAlign = 'center';
+  g.fillText('Мы видим:', centerX, y + 18);
+
+  drawPhase(centerX, centerY, radius, theta, palette);
+
   g.beginPath();
-  g.arc(EX,EY,ER+6,sunAngle,moonAngle,moonAngle<Math.PI);
-  // Only draw if angle is meaningfully between 0 and 360
-  g.strokeStyle=dk?'rgba(255,255,255,0.15)':'rgba(0,0,0,0.12)';
-  g.lineWidth=0.8;
+  g.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  g.strokeStyle = palette.ring;
+  g.lineWidth = 1;
   g.stroke();
   g.restore();
 }
 
-function draw(){
-  g.clearRect(0,0,DW,DH);
-  const a=ang;
-  const {x:mx,y:my}=mpos(a);
-  const theta=a*Math.PI/180;
-
-  drawLightZone();
-  drawOrbit();
-  drawSun();
-  drawEarth();
-  drawObserver(mx,my);
-  drawMoonOnOrbit(mx,my);
-  drawPreview(theta);
-
-  // Sun-direction arrow label (fixed, left side)
+function drawLightLabel(palette) {
   g.save();
-  g.fillStyle=TS; g.font='10px sans-serif'; g.textAlign='left';
-  g.fillText('← свет',SX+SR+4,SY-40);
+  g.fillStyle = palette.text;
+  g.font = `600 ${layout.fonts.helperLabel}px sans-serif`;
+  g.textAlign = 'left';
+  g.fillText('← свет', layout.lightLabel.x, layout.lightLabel.y);
   g.restore();
-
-  // Legend bottom-left
-  g.save();
-  g.fillStyle=TS; g.font='10px sans-serif'; g.textAlign='left';
-  g.fillStyle=OC;
-  // draw tiny triangle
-  g.beginPath(); g.moveTo(8,DH-10); g.lineTo(15,DH-17); g.lineTo(22,DH-10); g.closePath(); g.fill();
-  g.fillStyle=TS;
-  g.fillText('— наблюдатель',24,DH-10);
-  g.restore();
-
-  const p=getPhase(a);
-  pn.textContent=p.n; pe.textContent=p.e;
 }
 
-let ang=0,playing=true,raf;
+function drawLegend(palette) {
+  const { x, y } = layout.legend;
+  g.save();
+  g.beginPath();
+  g.moveTo(x, y - 8);
+  g.lineTo(x + 10, y - 20);
+  g.lineTo(x + 20, y - 8);
+  g.closePath();
+  g.fillStyle = palette.accent;
+  g.fill();
 
-function step(){
-  if(playing){
-    ang=(ang+0.35)%360;
-    sl.value=Math.round(ang);
-    ao.textContent=Math.round(ang)+'°';
+  g.fillStyle = palette.text;
+  g.font = `600 ${layout.fonts.helperLabel}px sans-serif`;
+  g.textAlign = 'left';
+  g.fillText('- наблюдатель', x + 24, y - 8);
+  g.restore();
+}
+
+function draw() {
+  const palette = getPalette();
+  const theta = ang * Math.PI / 180;
+  const moon = getMoonPosition(ang);
+
+  clearCanvas();
+  drawSceneBackground(palette);
+  drawLightZone(palette);
+  drawOrbit(palette);
+  drawSun(palette);
+  drawEarth(palette);
+  drawObserver(moon.x, moon.y, palette);
+  drawMoon(moon.x, moon.y, theta, palette);
+  drawPreview(theta, palette);
+  drawLightLabel(palette);
+  drawLegend(palette);
+
+  const phase = getPhase(ang);
+  pn.textContent = phase.name;
+  pe.textContent = phase.description;
+}
+
+function resizeCanvas() {
+  layout = getLayout();
+  pixelRatio = window.devicePixelRatio || 1;
+  cv.style.aspectRatio = `${layout.width} / ${layout.height}`;
+
+  const bounds = cv.getBoundingClientRect();
+  const cssWidth = Math.max(1, Math.round(bounds.width || layout.width));
+  const cssHeight = Math.round(cssWidth * layout.height / layout.width);
+
+  cv.style.height = `${cssHeight}px`;
+  cv.width = Math.round(cssWidth * pixelRatio);
+  cv.height = Math.round(cssHeight * pixelRatio);
+
+  const scale = cssWidth / layout.width;
+  g.setTransform(scale * pixelRatio, 0, 0, scale * pixelRatio, 0, 0);
+  g.imageSmoothingEnabled = true;
+  draw();
+}
+
+function updateAngleOutput() {
+  ao.textContent = `${Math.round(ang)}°`;
+}
+
+function step() {
+  if (playing) {
+    ang = (ang + 0.35) % 360;
+    sl.value = String(Math.round(ang));
+    updateAngleOutput();
     draw();
   }
-  raf=requestAnimationFrame(step);
+  rafId = requestAnimationFrame(step);
 }
 
-sl.addEventListener('input',()=>{
-  ang=parseFloat(sl.value);
-  ao.textContent=Math.round(ang)+'°';
+sl.addEventListener('input', () => {
+  ang = Number(sl.value);
+  updateAngleOutput();
   draw();
 });
-pb.addEventListener('click',()=>{
-  playing=!playing;
-  pb.textContent=playing?'⏸ Пауза':'▶ Пуск';
+
+pb.addEventListener('click', () => {
+  playing = !playing;
+  pb.textContent = playing ? '⏸ Пауза' : '▶ Пуск';
 });
 
-draw();
-step();
+function handleSchemeChange(event) {
+  isDark = event.matches;
+  draw();
+}
+
+if (typeof colorSchemeQuery.addEventListener === 'function') {
+  colorSchemeQuery.addEventListener('change', handleSchemeChange);
+} else if (typeof colorSchemeQuery.addListener === 'function') {
+  colorSchemeQuery.addListener(handleSchemeChange);
+}
+
+window.addEventListener('resize', resizeCanvas);
+
+updateAngleOutput();
+resizeCanvas();
+rafId = requestAnimationFrame(step);
 </script>
